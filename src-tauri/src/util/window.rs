@@ -3,8 +3,8 @@ pub trait WindowExt {
 }
 
 impl WindowExt for tauri::WebviewWindow {
-    fn zoom(&self, scale_factor: f64) -> tauri::Result<()> {
-        self.with_webview(move |webview| {
+    fn zoom(&self, _scale_factor: f64) -> tauri::Result<()> {
+        self.with_webview(move |_webview| {
             #[cfg(target_os = "linux")]
             {
                 use webkit2gtk::WebViewExt;

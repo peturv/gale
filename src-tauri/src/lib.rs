@@ -3,6 +3,7 @@ use std::env;
 use itertools::Itertools;
 use state::ManagerExt;
 use tauri::{App, AppHandle, RunEvent};
+#[cfg(any(windows, target_os = "linux"))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tracing::{debug, error, info, warn};
 
@@ -45,13 +46,17 @@ fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         return Err(err.into());
     }
 
-    if let Err(err) = app.deep_link().register("ror2mm") {
-        warn!("failed to register ror2mm deep link protocol: {:#}", err);
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        for scheme in ["ror2mm", "gale"] {
+            if let Err(err) = app.deep_link().register(scheme) {
+                warn!("failed to register {scheme} deep link protocol: {err:#}");
+            }
+        }
     }
 
-    if let Err(err) = app.deep_link().register("gale") {
-        warn!("failed to register gale deep link protocol: {:#}", err);
-    }
+    #[cfg(target_os = "macos")]
+    deep_link::setup_macos(app.handle());
 
     let args = env::args().collect_vec();
     if let Some(url) = args.get(1)

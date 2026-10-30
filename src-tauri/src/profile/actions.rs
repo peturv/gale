@@ -455,86 +455,94 @@ impl ManagedGame {
     }
 
     pub fn create_desktop_shortcut(&self) -> Result<()> {
-        let profile = self.active_profile();
-
-        let desktop_path =
-            dirs_next::desktop_dir().ok_or_eyre("could not find desktop directory")?;
-
-        #[cfg(target_os = "windows")]
-        let shortcut_path =
-            desktop_path.join(format!("Gale - {} - {}.lnk", self.game.name, profile.name));
-
-        #[cfg(target_os = "linux")]
-        let shortcut_path =
-            desktop_path.join(format!("gale-{}-{}.desktop", self.game.name, profile.name));
-
-        if shortcut_path.exists() {
-            bail!("shortcut already exists");
+        #[cfg(target_os = "macos")]
+        {
+            bail!("desktop shortcuts are not supported on macOS");
         }
 
-        let command = if util::flatpak::is_flatpak() {
-            format!("flatpak run {}", util::path::APP_GUID)
-        } else {
-            std::env::current_exe()
-                .context("failed to get current executable path")?
-                .to_str()
-                .context("executable path must be UTF-8")?
-                .to_string()
-        };
-
-        #[cfg(target_os = "windows")]
+        #[cfg(not(target_os = "macos"))]
         {
-            use std::os::windows::process::CommandExt;
-            use std::process::Command;
+            let profile = self.active_profile();
 
-            const NO_WINDOW: u32 = 0x08000000;
+            let desktop_path =
+                dirs_next::desktop_dir().ok_or_eyre("could not find desktop directory")?;
 
-            let command = format!(
-                "$ws = New-Object -ComObject WScript.Shell; \
-                 $shortcut = $ws.CreateShortcut('{}'); \
-                 $shortcut.TargetPath = '{}'; \
-                 $shortcut.Arguments = '--game \"{}\" --profile \"{}\" --launch --no-gui'; \
-                 $shortcut.Save()",
-                shortcut_path.to_string_lossy().replace("\\", "\\\\"),
-                command.replace("\\", "\\\\"),
-                self.game.slug,
-                profile.name
-            );
+            #[cfg(target_os = "windows")]
+            let shortcut_path =
+                desktop_path.join(format!("Gale - {} - {}.lnk", self.game.name, profile.name));
 
-            let result = Command::new("powershell")
-                .creation_flags(NO_WINDOW)
-                .arg("-Command")
-                .arg(&command)
-                .status()
-                .context("failed to execute PowerShell command")?;
+            #[cfg(target_os = "linux")]
+            let shortcut_path =
+                desktop_path.join(format!("gale-{}-{}.desktop", self.game.name, profile.name));
 
-            if !result.success() {
-                bail!("PowerShell failed to create shortcut");
+            if shortcut_path.exists() {
+                bail!("shortcut already exists");
             }
+
+            let command = if util::flatpak::is_flatpak() {
+                format!("flatpak run {}", util::path::APP_GUID)
+            } else {
+                std::env::current_exe()
+                    .context("failed to get current executable path")?
+                    .to_str()
+                    .context("executable path must be UTF-8")?
+                    .to_string()
+            };
+
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                use std::process::Command;
+
+                const NO_WINDOW: u32 = 0x08000000;
+
+                let command = format!(
+                    "$ws = New-Object -ComObject WScript.Shell; \
+                     $shortcut = $ws.CreateShortcut('{}'); \
+                     $shortcut.TargetPath = '{}'; \
+                     $shortcut.Arguments = '--game \"{}\" --profile \"{}\" --launch --no-gui'; \
+                     $shortcut.Save()",
+                    shortcut_path.to_string_lossy().replace("\\", "\\\\"),
+                    command.replace("\\", "\\\\"),
+                    self.game.slug,
+                    profile.name
+                );
+
+                let result = Command::new("powershell")
+                    .creation_flags(NO_WINDOW)
+                    .arg("-Command")
+                    .arg(&command)
+                    .status()
+                    .context("failed to execute PowerShell command")?;
+
+                if !result.success() {
+                    bail!("PowerShell failed to create shortcut");
+                }
+            }
+
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let desktop_content = format!(
+                    "[Desktop Entry]\n\
+                     Type=Application\n\
+                     Name=Gale - {} - {}\n\
+                     Exec=\"{}\" --game \"{}\" --profile \"{}\" --launch --no-gui\n\
+                     Icon=gale\n\
+                     Terminal=false\n\
+                     Categories=Game;",
+                    self.game.name, profile.name, command, self.game.slug, profile.name
+                );
+
+                std::fs::write(&shortcut_path, desktop_content)
+                    .context("failed to write desktop file")?;
+
+                std::fs::set_permissions(&shortcut_path, PermissionsExt::from_mode(0o755))
+                    .context("failed to set permissions on desktop file")?;
+            }
+
+            Ok(())
         }
-
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let desktop_content = format!(
-                "[Desktop Entry]\n\
-                 Type=Application\n\
-                 Name=Gale - {} - {}\n\
-                 Exec=\"{}\" --game \"{}\" --profile \"{}\" --launch --no-gui\n\
-                 Icon=gale\n\
-                 Terminal=false\n\
-                 Categories=Game;",
-                self.game.name, profile.name, command, self.game.slug, profile.name
-            );
-
-            std::fs::write(&shortcut_path, desktop_content)
-                .context("failed to write desktop file")?;
-
-            std::fs::set_permissions(&shortcut_path, PermissionsExt::from_mode(0o755))
-                .context("failed to set permissions on desktop file")?;
-        }
-
-        Ok(())
     }
 }

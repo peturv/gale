@@ -172,6 +172,32 @@ fn locate_steam_script() -> Result<PathBuf> {
         })
 }
 
+#[cfg(target_os = "macos")]
+fn create_base_steam_command() -> Result<Command> {
+    // steamlocate returns ~/Library/Application Support/Steam (data dir).
+    // The client binary lives in the nested AppBundle Steam maintains there,
+    // not in whatever Steam.app bootstrap may exist under /Applications.
+    let steam_dir = steamlocate::locate().context("failed to locate steam installation")?;
+    use crate::util::fs::PathExt;
+    let path = steam_dir
+        .path()
+        .join("Steam.AppBundle/Steam/Contents/MacOS/steam_osx")
+        .exists_or_none()
+        .ok_or_else(|| {
+            eyre!(
+                "steam_osx not present in Steam.AppBundle at {}",
+                steam_dir.path().display()
+            )
+        })?;
+    info!("found steam_osx at {}", path.display());
+    let mut command = Command::new("arch");
+
+    command.arg(path)
+      .env("ARCHPREFERENCE", "arm64,x86_64")
+      .env("STEAM_RUNTIME", "1");
+    Ok(command)
+}
+
 pub fn get_steam_launch_options(app_id: u32) -> Result<serde_json::Value> {
     let app_info = get_steam_app_info(app_id)?;
 

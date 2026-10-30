@@ -13,7 +13,8 @@
 		"format": "prettier --write .",
 		"tauri": "tauri",
 		"locale:compile": "paraglide-js compile --outdir src/lib/paraglide",
-		"locale:machine-translate": "inlang machine translate --project project.inlang --locale en"
+		"locale:machine-translate": "inlang machine translate --project project.inlang --locale en",
+    "build:macos": "bash -c './build_macos_local.sh'"
 	},
 	"devDependencies": {
 		"@iconify/svelte": "^5.2.1",

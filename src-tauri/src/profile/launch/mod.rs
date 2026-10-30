@@ -27,6 +27,8 @@ use crate::{
 mod custom_args;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 mod mod_loader;
 mod platform;
 
@@ -122,6 +124,35 @@ impl ManagedGame {
         // if the game has a platform but the setting is unset, fill it in
         platform = platform.or_else(|| self.game.platforms.iter().next());
 
+        let profile = self.active_profile();
+
+        // macOS modded BepInEx needs the start script + resolved game exe;
+        // steam_osx cannot inject Doorstop (no Windows-style proxy DLL).
+        #[cfg(target_os = "macos")]
+        if !vanilla
+            && matches!(
+                &self.game.mod_loader.kind,
+                crate::game::mod_loader::ModLoaderKind::BepInEx { .. }
+            )
+        {
+            let command = macos::create_modded_bepinex_command(
+                game_dir,
+                &profile.path,
+                self.game.platforms.steam.as_ref().map(|steam| steam.id),
+                &self.game.mod_loader,
+                game_custom_args,
+                &profile.custom_args,
+            )?;
+
+            return Ok((
+                LaunchMode::Direct {
+                    instances: 1,
+                    interval_secs: 0.0,
+                },
+                command,
+            ));
+        }
+
         let mut command = match (&launch_mode, platform) {
             // If the setting is `Launcher` and we have a platform, use the platform-specific
             // launch command (if there is one). Otherwise, fall back to direct execution.
@@ -131,8 +162,6 @@ impl ManagedGame {
             _ => None,
         }
         .unwrap_or_else(|| find_executable(game_dir).map(Command::new))?;
-
-        let profile = self.active_profile();
 
         #[cfg(target_os = "linux")]
         let is_proton = !vanilla && {
@@ -158,7 +187,7 @@ impl ManagedGame {
             is_proton
         };
 
-        #[cfg(target_os = "windows")]
+        #[cfg(not(target_os = "linux"))]
         let is_proton = false;
 
         if is_proton {

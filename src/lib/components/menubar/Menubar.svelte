@@ -27,8 +27,11 @@
 	import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 	import { pushInfoToast, pushToast } from '$lib/toast';
 	import { Menu, MenuItem, PredefinedMenuItem, Submenu } from '@tauri-apps/api/menu';
+	import { platform } from '@tauri-apps/plugin-os';
 	import profiles from '$lib/state/profile.svelte';
 	import { m } from '$lib/paraglide/messages';
+
+	const isMacOs = platform() === 'macos';
 
 	let importR2Open = $state(false);
 	let newProfileOpen = $state(false);
@@ -402,8 +405,11 @@
 
 			if (useNativeMenu.current) {
 				menu.setAsAppMenu();
+			} else if (isMacOs) {
+				// Keep only the macOS app menu (with Quit / Cmd+Q) when the full native bar is off.
+				keepMacOsAppMenuOnly().then((appMenu) => appMenu.setAsAppMenu());
 			} else {
-				Menu.new().then((menu) => menu.setAsAppMenu());
+				Menu.new().then((emptyMenu) => emptyMenu.setAsAppMenu());
 			}
 		}
 	});
@@ -455,10 +461,29 @@
 			)
 		);
 
-		menu = await Menu.new({
-			items: nativeMenus
-		});
+		if (isMacOs) {
+			// Reuse Menu.default()'s app menu (About / Hide / Quit…) and append ours after it.
+			menu = await Menu.default();
+			const defaultItems = await menu.items();
+			for (const item of defaultItems.slice(1)) {
+				await menu.remove(item);
+			}
+			await menu.append(nativeMenus);
+		} else {
+			menu = await Menu.new({
+				items: nativeMenus
+			});
+		}
 	});
+
+	async function keepMacOsAppMenuOnly() {
+		const appMenu = await Menu.default();
+		const items = await appMenu.items();
+		for (const item of items.slice(1)) {
+			await appMenu.remove(item);
+		}
+		return appMenu;
+	}
 </script>
 
 <svelte:body

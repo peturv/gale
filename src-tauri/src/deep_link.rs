@@ -12,6 +12,24 @@ use crate::{
     thunderstore::{self, Backend, FrontendMod},
 };
 
+#[cfg(target_os = "macos")]
+pub fn setup_macos(app: &AppHandle) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    let app_handle = app.to_owned();
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            self::handle(&app_handle, url.to_string());
+        }
+    });
+
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        for url in urls {
+            self::handle(app, url.to_string());
+        }
+    }
+}
+
 pub fn handle(app: &AppHandle, url: String) -> bool {
     app.get_webview_window("main")
         .expect("app should have main window")
